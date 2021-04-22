@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">博物馆demo</string>
+    <string name="login">登录</string>
+    <string name="register">注册</string>
+    <string name="account">账&#12288;&#12288;号:</string>
+    <string name="password">密&#12288;&#12288;码:</string>
+</resources>
