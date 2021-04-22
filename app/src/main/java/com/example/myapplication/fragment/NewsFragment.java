@@ -3,11 +3,23 @@ package com.example.myapplication.fragment;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.amap.api.location.AMapLocation;
+import com.amap.api.location.AMapLocationClient;
+import com.amap.api.location.AMapLocationClientOption;
+import com.amap.api.location.AMapLocationListener;
+import com.amap.api.maps2d.AMap;
+import com.amap.api.maps2d.LocationSource;
+import com.amap.api.maps2d.MapView;
+import com.amap.api.maps2d.model.MyLocationStyle;
 import com.google.gson.Gson;
 import com.scwang.smartrefresh.layout.api.RefreshLayout;
 import com.scwang.smartrefresh.layout.listener.OnLoadMoreListener;
@@ -27,26 +39,19 @@ import java.util.HashMap;
 import java.util.List;
 
 
-public class NewsFragment extends BaseFragment {
+public class NewsFragment extends BaseFragment implements LocationSource,AMapLocationListener {
 
-    private RecyclerView recyclerView;
-    private RefreshLayout refreshLayout;
 //    private NewsAdapter newsAdapter;
     private List<NewsEntity> datas = new ArrayList<>();
     private LinearLayoutManager linearLayoutManager;
     private int pageNum = 1;
-//    private Handler mHandler = new Handler() {
-//        @Override
-//        public void handleMessage(@NonNull Message msg) {
-//            super.handleMessage(msg);
-//            switch (msg.what) {
-//                case 0:
-//                    newsAdapter.setDatas(datas);
-//                    newsAdapter.notifyDataSetChanged();
-//                    break;
-//            }
-//        }
-//    };
+
+    private MapView mapView;
+    private AMap aMap;
+    private MyLocationStyle myLocationStyle;
+    private LocationSource.OnLocationChangedListener mListener;
+    private AMapLocationClient locationClient;
+    private AMapLocationClientOption clientOption;
 
     public NewsFragment() {
     }
@@ -57,14 +62,27 @@ public class NewsFragment extends BaseFragment {
     }
 
     @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        View view = inflater.inflate(R.layout.fragment_news, container, false);
+        initview(savedInstanceState,view);
+        return view;
+    }
+
+
+    @Override
     protected int initLayout() {
         return R.layout.fragment_news;
     }
 
     @Override
     protected void initView() {
-        recyclerView = mRootView.findViewById(R.id.recyclerView);
-        refreshLayout = mRootView.findViewById(R.id.refreshLayout);
+
     }
 
     @Override
@@ -72,81 +90,91 @@ public class NewsFragment extends BaseFragment {
     {
 
     }
-//    @Override
-//    protected void initData() {
-//        linearLayoutManager = new LinearLayoutManager(getActivity());
-//        linearLayoutManager.setOrientation(LinearLayoutManager.VERTICAL);
-//        recyclerView.setLayoutManager(linearLayoutManager);
-//        newsAdapter = new NewsAdapter(getActivity());
-//        recyclerView.setAdapter(newsAdapter);
-//        newsAdapter.setOnItemClickListener(new NewsAdapter.OnItemClickListener() {
-//            @Override
-//            public void onItemClick(Serializable obj) {
-////                showToast("点击");
-//                NewsEntity newsEntity = (NewsEntity) obj;
-//                String url = "http://192.168.31.32:8089/newsDetail?title=" + newsEntity.getAuthorName();
-//                Bundle bundle = new Bundle();
-//                bundle.putString("url", url);
-//                navigateToWithBundle(WebActivity.class, bundle);
-//            }
-//        });
-//        refreshLayout.setOnRefreshListener(new OnRefreshListener() {
-//            @Override
-//            public void onRefresh(RefreshLayout refreshlayout) {
-//                pageNum = 1;
-//                getNewsList(true);
-//            }
-//        });
-//        refreshLayout.setOnLoadMoreListener(new OnLoadMoreListener() {
-//            @Override
-//            public void onLoadMore(RefreshLayout refreshlayout) {
-//                pageNum++;
-//                getNewsList(false);
-//            }
-//        });
-//        getNewsList(true);
-//    }
+    private void initview( Bundle savedInstanceState,View view){
+        mapView= (MapView) view.findViewById(R.id.map);
+        mapView.onCreate(savedInstanceState);
+        if (aMap==null)
+        {
+            aMap=mapView.getMap();
+        }
+        myLocationStyle = new MyLocationStyle();//初始化定位蓝点样式类
+        aMap.setMyLocationStyle(myLocationStyle);
+        aMap.getUiSettings().setMyLocationButtonEnabled(true);
+        aMap.setLocationSource(this);
+        aMap.setMyLocationEnabled(true);
+    }
 
-//    private void getNewsList(final boolean isRefresh) {
-//        HashMap<String, Object> params = new HashMap<>();
-//        params.put("page", pageNum);
-//        params.put("limit", ApiConfig.PAGE_SIZE);
-//        Api.config(ApiConfig.NEWS_LIST, params).getRequest(getActivity(), new TtitCallback() {
-//            @Override
-//            public void onSuccess(final String res) {
-//                if (isRefresh) {
-//                    refreshLayout.finishRefresh(true);
-//                } else {
-//                    refreshLayout.finishLoadMore(true);
-//                }
-//                NewsListResponse response = new Gson().fromJson(res, NewsListResponse.class);
-//                if (response != null && response.getCode() == 0) {
-//                    List<NewsEntity> list = response.getPage().getList();
-//                    if (list != null && list.size() > 0) {
-//                        if (isRefresh) {
-//                            datas = list;
-//                        } else {
-//                            datas.addAll(list);
-//                        }
-//                        mHandler.sendEmptyMessage(0);
-//                    } else {
-//                        if (isRefresh) {
-//                            showToastSync("暂时无数据");
-//                        } else {
-//                            showToastSync("没有更多数据");
-//                        }
-//                    }
-//                }
-//            }
-//
-//            @Override
-//            public void onFailure(Exception e) {
-//                if (isRefresh) {
-//                    refreshLayout.finishRefresh(true);
-//                } else {
-//                    refreshLayout.finishLoadMore(true);
-//                }
-//            }
-//        });
-//    }
+
+    /**
+     * 激活定位
+     */
+
+    public void activate(LocationSource.OnLocationChangedListener listener) {
+        mListener=listener;
+        if(locationClient==null){
+            locationClient=new AMapLocationClient(getActivity());
+            clientOption=new AMapLocationClientOption();
+            locationClient.setLocationListener( this);
+            clientOption.setLocationMode(AMapLocationClientOption.AMapLocationMode.Hight_Accuracy);//高精度定位
+            clientOption.setOnceLocationLatest(true);//设置单次精确定位
+            locationClient.setLocationOption(clientOption);
+            locationClient.startLocation();
+        }
+
+    }
+    /**
+     * 停止定位
+     */
+
+    public void deactivate() {
+        mListener=null;
+        if(locationClient!=null){
+            locationClient.stopLocation();
+            locationClient.onDestroy();
+        }
+        locationClient=null;
+    }
+
+    public void onLocationChanged(AMapLocation aMapLocation) {
+        if (mListener != null&&aMapLocation != null) {
+            if (aMapLocation != null
+                    &&aMapLocation.getErrorCode() == 0) {
+                mListener.onLocationChanged(aMapLocation);// 显示系统小蓝点
+            } else {
+                String errText = "定位失败," + aMapLocation.getErrorCode()+ ": " + aMapLocation.getErrorInfo();
+                Log.e("AmapErr",errText);
+            }
+        }
+    }
+
+
+    /**
+     * 必须重写以下方法
+     */
+    @Override
+    public void onResume(){
+        super.onResume();
+        mapView.onResume();
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        mapView.onPause();
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        mapView.onSaveInstanceState(outState);
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        mapView.onDestroy();
+        if(locationClient!=null){
+            locationClient.onDestroy();
+        }
+    }
 }
